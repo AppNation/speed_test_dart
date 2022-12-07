@@ -10,6 +10,10 @@ import 'package:speed_test_dart/enums/file_size.dart';
 import 'package:sync/sync.dart';
 import 'package:xml_parser/xml_parser.dart';
 
+typedef void DoneCallback(double transferRate);
+typedef void ProgressCallback(double transferRate);
+typedef void ErrorCallback(String errorMessage);
+
 /// A Speed tester.
 class SpeedTestDart {
   /// Returns [Settings] from speedtest.net.
@@ -116,80 +120,107 @@ class SpeedTestDart {
     return result;
   }
 
+  double getSpeed(List<int> tasks, int elapsedMilliseconds) {
+    final _totalSize = tasks.reduce((a, b) => a + b);
+    return (_totalSize * 8 / 1024) / (elapsedMilliseconds / 1000) / 1000;
+  }
+
   /// Returns [double] downloaded speed in MB/s.
-  Future<double> testDownloadSpeed({
+  Future<void> testDownloadSpeed({
     required List<Server> servers,
     int simultaneousDownloads = 2,
     int retryCount = 3,
     List<FileSize> downloadSizes = defaultDownloadSizes,
+    required ProgressCallback onProgress,
+    required DoneCallback onDone,
+    required ErrorCallback onError,
   }) async {
-    double downloadSpeed = 0;
+    try {
+      double downloadSpeed = 0;
 
-    // Iterates over all servers, if one request fails, the next one is tried.
-    for (final s in servers) {
-      final testData = generateDownloadUrls(s, retryCount, downloadSizes);
-      final semaphore = Semaphore(simultaneousDownloads);
-      final tasks = <int>[];
-      final stopwatch = Stopwatch()..start();
+      // Iterates over all servers, if one request fails, the next one is tried.
+      for (final s in servers) {
+        final testData = generateDownloadUrls(s, retryCount, downloadSizes);
+        final semaphore = Semaphore(simultaneousDownloads);
+        final tasks = <int>[];
+        final stopwatch = Stopwatch()..start();
 
-      try {
-        await Future.forEach(testData, (String td) async {
-          await semaphore.acquire();
-          try {
-            final data = await http.get(Uri.parse(td));
-            tasks.add(data.bodyBytes.length);
-          } finally {
-            semaphore.release();
-          }
-        });
-        stopwatch.stop();
-        final _totalSize = tasks.reduce((a, b) => a + b);
-        downloadSpeed = (_totalSize * 8 / 1024) /
-            (stopwatch.elapsedMilliseconds / 1000) /
-            1000;
-        break;
-      } catch (_) {
-        continue;
+        try {
+          await Future.forEach(testData, (String td) async {
+            await semaphore.acquire();
+            try {
+              final data = await http.get(Uri.parse(td));
+              tasks.add(data.bodyBytes.length);
+              onProgress(
+                getSpeed(
+                  tasks,
+                  stopwatch.elapsedMilliseconds,
+                ),
+              );
+            } finally {
+              semaphore.release();
+            }
+          });
+          stopwatch.stop();
+          downloadSpeed = getSpeed(tasks, stopwatch.elapsedMilliseconds);
+
+          break;
+        } catch (_) {
+          continue;
+        }
       }
+      onDone(downloadSpeed);
+    } catch (e) {
+      onError(e.toString());
     }
-    return downloadSpeed;
   }
 
   /// Returns [double] upload speed in MB/s.
-  Future<double> testUploadSpeed({
+  Future<void> testUploadSpeed({
     required List<Server> servers,
     int simultaneousUploads = 2,
     int retryCount = 3,
+    required ProgressCallback onProgress,
+    required DoneCallback onDone,
+    required ErrorCallback onError,
   }) async {
-    double uploadSpeed = 0;
-    for (var s in servers) {
-      final testData = generateUploadData(retryCount);
-      final semaphore = Semaphore(simultaneousUploads);
-      final stopwatch = Stopwatch()..start();
-      final tasks = <int>[];
+    try {
+      double uploadSpeed = 0;
+      for (var s in servers) {
+        final testData = generateUploadData(retryCount);
+        final semaphore = Semaphore(simultaneousUploads);
+        final stopwatch = Stopwatch()..start();
+        final tasks = <int>[];
 
-      try {
-        await Future.forEach(testData, (String td) async {
-          await semaphore.acquire();
-          try {
-            // do post request to measure time for upload
-            await http.post(Uri.parse(s.url), body: td);
-            tasks.add(td.length);
-          } finally {
-            semaphore.release();
-          }
-        });
-        stopwatch.stop();
-        final _totalSize = tasks.reduce((a, b) => a + b);
-        uploadSpeed = (_totalSize * 8 / 1024) /
-            (stopwatch.elapsedMilliseconds / 1000) /
-            1000;
-        break;
-      } catch (_) {
-        continue;
+        try {
+          await Future.forEach(testData, (String td) async {
+            await semaphore.acquire();
+            try {
+              // do post request to measure time for upload
+              await http.post(Uri.parse(s.url), body: td);
+              tasks.add(td.length);
+              onProgress(
+                getSpeed(
+                  tasks,
+                  stopwatch.elapsedMilliseconds,
+                ),
+              );
+            } finally {
+              semaphore.release();
+            }
+          });
+          stopwatch.stop();
+          uploadSpeed = getSpeed(tasks, stopwatch.elapsedMilliseconds);
+
+          break;
+        } catch (_) {
+          continue;
+        }
       }
+      onDone(uploadSpeed);
+    } catch (e) {
+      onError(e.toString());
     }
-    return uploadSpeed;
   }
 
   /// Generate list of [String] urls for upload.

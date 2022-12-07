@@ -40,12 +40,18 @@ class _MyAppState extends State<MyApp> {
     setState(() {
       loadingDownload = true;
     });
-    final _downloadRate =
-        await tester.testDownloadSpeed(servers: bestServersList);
-    setState(() {
-      downloadRate = _downloadRate;
-      loadingDownload = false;
-    });
+    await tester.testDownloadSpeed(
+      servers: bestServersList,
+      onProgress: (transferRate) => setState(() {
+        downloadRate = transferRate;
+      }),
+      onDone: (transferRate) => setState(() {
+        downloadRate = transferRate;
+        loadingDownload = false;
+      }),
+      onError: (errorMessage) =>
+          debugPrint('_testDownloadSpeed error: $errorMessage'),
+    );
   }
 
   Future<void> _testUploadSpeed() async {
@@ -53,12 +59,18 @@ class _MyAppState extends State<MyApp> {
       loadingUpload = true;
     });
 
-    final _uploadRate = await tester.testUploadSpeed(servers: bestServersList);
-
-    setState(() {
-      uploadRate = _uploadRate;
-      loadingUpload = false;
-    });
+    await tester.testUploadSpeed(
+      servers: bestServersList,
+      onProgress: (transferRate) => setState(() {
+        uploadRate = transferRate;
+      }),
+      onDone: (transferRate) => setState(() {
+        uploadRate = transferRate;
+        loadingUpload = false;
+      }),
+      onError: (errorMessage) =>
+          debugPrint('_testUploadSpeed error: $errorMessage'),
+    );
   }
 
   @override
@@ -99,13 +111,12 @@ class _MyAppState extends State<MyApp> {
                     ),
                     Text('Testing download speed...'),
                   ],
-                )
-              else
-                Text('Download rate  ${downloadRate.toStringAsFixed(2)} Mb/s'),
+                ),
+              Text('Download rate  ${downloadRate.toStringAsFixed(2)} Mb/s'),
               const SizedBox(height: 10),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  primary: readyToTest && !loadingDownload
+                  backgroundColor: readyToTest && !loadingDownload
                       ? Colors.blue
                       : Colors.grey,
                 ),
@@ -137,15 +148,14 @@ class _MyAppState extends State<MyApp> {
                     SizedBox(height: 10),
                     Text('Testing upload speed...'),
                   ],
-                )
-              else
-                Text('Upload rate ${uploadRate.toStringAsFixed(2)} Mb/s'),
+                ),
+              Text('Upload rate ${uploadRate.toStringAsFixed(2)} Mb/s'),
               const SizedBox(
                 height: 10,
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  primary: readyToTest ? Colors.blue : Colors.grey,
+                  backgroundColor: readyToTest ? Colors.blue : Colors.grey,
                 ),
                 onPressed: loadingUpload
                     ? null
