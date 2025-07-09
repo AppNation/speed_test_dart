@@ -8,7 +8,7 @@ import 'package:speed_test_dart/classes/classes.dart';
 import 'package:speed_test_dart/constants.dart';
 import 'package:speed_test_dart/enums/file_size.dart';
 import 'package:sync/sync.dart';
-import 'package:xml_parser/xml_parser.dart';
+import 'package:xml/xml.dart';
 
 typedef void DoneCallback(double transferRate);
 typedef void ProgressCallback(double transferRate);
@@ -18,35 +18,77 @@ typedef void ErrorCallback(String errorMessage);
 class SpeedTestDart {
   /// Returns [Settings] from speedtest.net.
   Future<Settings> getSettings() async {
-    final response = await http.get(Uri.parse(configUrl));
-    final settings = Settings.fromXMLElement(
-      XmlDocument.from(response.body)?.getElement('settings'),
-    );
+    final headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.5',
+      'Accept-Encoding': 'gzip, deflate',
+      'Connection': 'keep-alive',
+      'Upgrade-Insecure-Requests': '1',
+    };
 
-    var serversConfig = ServersList(<Server>[]);
-    for (final element in serversUrls) {
-      if (serversConfig.servers.isNotEmpty) break;
-      try {
-        final resp = await http.get(Uri.parse(element));
+    try {
+      final response = await http.get(
+        Uri.parse(configUrl),
+        headers: headers,
+      );
 
-        serversConfig = ServersList.fromXMLElement(
-          XmlDocument.from(resp.body)?.getElement('settings'),
-        );
-      } catch (ex) {
-        serversConfig = ServersList(<Server>[]);
+      if (response.statusCode != 200) {
+        throw Exception('HTTP Error: ${response.statusCode}');
       }
+
+      // XML parsing ile güvenli element arama
+      final xmlDoc = XmlDocument.parse(response.body);
+      XmlElement? settingsElement;
+
+      if (xmlDoc.rootElement.name.local == 'settings') {
+        settingsElement = xmlDoc.rootElement;
+      } else {
+        settingsElement = xmlDoc.rootElement.getElement('settings');
+      }
+
+      if (settingsElement == null) {
+        throw Exception('Settings element not found in XML response');
+      }
+
+      final settings = Settings.fromXMLElement(settingsElement);
+
+      var serversConfig = ServersList(<Server>[]);
+      for (final element in serversUrls) {
+        if (serversConfig.servers.isNotEmpty) break;
+        try {
+          final resp = await http.get(Uri.parse(element), headers: headers);
+
+          if (resp.statusCode == 200) {
+            final serverXmlDoc = XmlDocument.parse(resp.body);
+            XmlElement? serverSettingsElement;
+
+            if (serverXmlDoc.rootElement.name.local == 'settings') {
+              serverSettingsElement = serverXmlDoc.rootElement;
+            } else {
+              serverSettingsElement = serverXmlDoc.rootElement.getElement('settings');
+            }
+
+            if (serverSettingsElement != null) {
+              serversConfig = ServersList.fromXMLElement(serverSettingsElement);
+            }
+          }
+        } catch (ex) {
+          print('Error fetching server config from $element: $ex');
+          serversConfig = ServersList(<Server>[]);
+        }
+      }
+
+      final ignoredIds = settings.serverConfig.ignoreIds.split(',');
+      serversConfig.calculateDistances(settings.client.geoCoordinate);
+      settings.servers = serversConfig.servers.where((s) => !ignoredIds.contains(s.id.toString())).toList();
+      settings.servers.sort((a, b) => a.distance.compareTo(b.distance));
+
+      return settings;
+    } catch (e) {
+      print('Error in getSettings: $e');
+      rethrow;
     }
-
-    final ignoredIds = settings.serverConfig.ignoreIds.split(',');
-    serversConfig.calculateDistances(settings.client.geoCoordinate);
-    settings.servers = serversConfig.servers
-        .where(
-          (s) => !ignoredIds.contains(s.id.toString()),
-        )
-        .toList();
-    settings.servers.sort((a, b) => a.distance.compareTo(b.distance));
-
-    return settings;
   }
 
   /// Returns a List[Server] with the best servers, ordered
@@ -110,10 +152,7 @@ class SpeedTestDart {
     for (final ds in downloadSizes) {
       for (var i = 0; i < retryCount; i++) {
         result.add(
-          downloadUriBase
-              .toString()
-              .replaceAll('%7B0%7D', FILE_SIZE_MAPPING[ds].toString())
-              .replaceAll('%7B1%7D', i.toString()),
+          downloadUriBase.toString().replaceAll('%7B0%7D', FILE_SIZE_MAPPING[ds].toString()).replaceAll('%7B1%7D', i.toString()),
         );
       }
     }
@@ -230,8 +269,7 @@ class SpeedTestDart {
 
     for (var sizeCounter = 1; sizeCounter < maxUploadSize + 1; sizeCounter++) {
       final size = sizeCounter * 200 * 1024;
-      final builder = StringBuffer()
-        ..write('content ${sizeCounter.toString()}=');
+      final builder = StringBuffer()..write('content ${sizeCounter.toString()}=');
 
       for (var i = 0; i < size; ++i) {
         builder.write(hars[random.nextInt(hars.length)]);

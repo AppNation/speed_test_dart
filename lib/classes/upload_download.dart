@@ -1,4 +1,4 @@
-import 'package:xml_parser/xml_parser.dart';
+import 'package:xml/xml.dart';
 
 class Upload {
   Upload(

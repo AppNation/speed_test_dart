@@ -1,4 +1,4 @@
-import 'package:xml_parser/xml_parser.dart';
+import 'package:xml/xml.dart';
 
 class ServerConfig {
   ServerConfig(
@@ -6,8 +6,7 @@ class ServerConfig {
   );
 
   /// Factory constructor for creating a new ServerConfig from a [XmlElement].
-  ServerConfig.fromXMLElement(XmlElement? element)
-      : ignoreIds = element!.getAttribute('ignoreids')!;
+  ServerConfig.fromXMLElement(XmlElement? element) : ignoreIds = element!.getAttribute('ignoreids')!;
 
   String ignoreIds;
 }

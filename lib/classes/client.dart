@@ -1,5 +1,5 @@
 import 'package:speed_test_dart/classes/classes.dart';
-import 'package:xml_parser/xml_parser.dart';
+import 'package:xml/xml.dart';
 
 class Client {
   Client(

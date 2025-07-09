@@ -1,5 +1,4 @@
 import 'package:speed_test_dart/classes/classes.dart';
-import 'package:xml_parser/xml_parser.dart';
 
 class Settings {
   Settings(
@@ -11,13 +10,12 @@ class Settings {
     this.servers,
   );
 
-  Settings.fromXMLElement(XmlElement? element)
+  Settings.fromXMLElement(element)
       : client = Client.fromXMLElement(element?.getElement('client')),
         times = Times.fromXMLElement(element?.getElement('times')),
         download = Download.fromXMLElement(element?.getElement('download')),
         upload = Upload.fromXMLElement(element?.getElement('upload')),
-        serverConfig =
-            ServerConfig.fromXMLElement(element?.getElement('server-config')),
+        serverConfig = ServerConfig.fromXMLElement(element?.getElement('server-config')),
         servers = <Server>[];
   Client client;
 

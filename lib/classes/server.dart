@@ -1,5 +1,5 @@
 import 'package:speed_test_dart/classes/classes.dart';
-import 'package:xml_parser/xml_parser.dart';
+import 'package:xml/xml.dart';
 
 class Server {
   Server(
@@ -16,47 +16,82 @@ class Server {
     this.geoCoordinate,
   );
 
-  Server.fromXMLElement(XmlElement? element)
-      : id = int.parse(element!.getAttribute('id')!),
-        name = element.getAttribute('name')!,
-        country = element.getAttribute('country')!,
-        sponsor = element.getAttribute('sponsor')!,
-        host = element.getAttribute('host')!,
-        url = element.getAttribute('url')!,
-        latitude = double.parse(element.getAttribute('lat')!),
-        longitude = double.parse(element.getAttribute('lon')!),
-        distance = 99999999999,
-        latency = 99999999999,
-        geoCoordinate = Coordinate(
-          double.parse(element.getAttribute('lat')!),
-          double.parse(element.getAttribute('lon')!),
-        );
+  Server.fromXMLElement(XmlElement? element) {
+    if (element == null) {
+      throw ArgumentError('XML element cannot be null');
+    }
 
-  int id;
-  String name;
-  String country;
-  String sponsor;
-  String host;
-  String url;
-  double latitude;
-  double longitude;
-  double distance;
-  double latency;
-  Coordinate geoCoordinate;
+    final idStr = element.getAttribute('id');
+    final latStr = element.getAttribute('lat');
+    final lonStr = element.getAttribute('lon');
+
+    if (idStr == null || latStr == null || lonStr == null) {
+      throw ArgumentError('Required attributes (id, lat, lon) are missing');
+    }
+
+    id = int.parse(idStr);
+    name = element.getAttribute('name') ?? '';
+    country = element.getAttribute('country') ?? '';
+    sponsor = element.getAttribute('sponsor') ?? '';
+    host = element.getAttribute('host') ?? '';
+    url = element.getAttribute('url') ?? '';
+    latitude = double.parse(latStr);
+    longitude = double.parse(lonStr);
+    distance = 99999999999;
+    latency = 99999999999;
+    geoCoordinate = Coordinate(latitude, longitude);
+  }
+
+  late int id;
+  late String name;
+  late String country;
+  late String sponsor;
+  late String host;
+  late String url;
+  late double latitude;
+  late double longitude;
+  late double distance;
+  late double latency;
+  late Coordinate geoCoordinate;
 }
 
 class ServersList {
-  ServersList(
-    this.servers,
-  );
+  ServersList(this.servers);
 
-  ServersList.fromXMLElement(XmlElement? element)
-      : servers = element!.getElement('servers')!.children!.map((element) {
-          final server = Server.fromXMLElement(element as XmlElement);
-          return server;
-        });
+  ServersList.fromXMLElement(XmlElement? element) {
+    if (element == null) {
+      servers = <Server>[];
+      return;
+    }
 
-  Iterable<Server> servers;
+    final serversElement = element.getElement('servers');
+    if (serversElement == null) {
+      servers = <Server>[];
+      return;
+    }
+
+    try {
+      servers = serversElement.children
+          .where((child) => child is XmlElement) // Sadece XmlElement'leri filtrele
+          .cast<XmlElement>()
+          .map((xmlElement) {
+            try {
+              return Server.fromXMLElement(xmlElement);
+            } catch (e) {
+              print('Error parsing server element: $e');
+              return null;
+            }
+          })
+          .where((server) => server != null) // Null değerleri filtrele
+          .cast<Server>()
+          .toList();
+    } catch (e) {
+      print('Error parsing servers: $e');
+      servers = <Server>[];
+    }
+  }
+
+  late List<Server> servers;
 
   void calculateDistances(Coordinate clientCoordinate) {
     for (final s in servers) {
